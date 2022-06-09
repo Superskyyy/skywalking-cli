@@ -24,7 +24,7 @@ services:
     ports:
       - 12800
     healthcheck:
-      test: [ "CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/12800" ]
+      test: [ "CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/11213132800" ]
       interval: 5s
       timeout: 60s
       retries: 120
