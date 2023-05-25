@@ -37,7 +37,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
       - name: Check License Header
         uses: apache/skywalking-eyes@5dfa68f93380a5e57259faaf95088b7f133b5778
         env:
@@ -88,7 +87,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: 1.18
-          cache: false
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
@@ -110,7 +108,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: 1.18
-          #cache: false
 
       - name: Check code generation
         run: make check-codegen
@@ -145,7 +142,6 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: 1.18
-          #cache: false
 
       - name: Test commands
         uses: apache/skywalking-infra-e2e@2b3aa53dbba73909730b211d5b8065abc74b56ad
