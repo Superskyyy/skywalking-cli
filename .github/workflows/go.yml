@@ -69,10 +69,10 @@ jobs:
         with:
           files_from_source_file: .github/file-filters.txt
       - name: List all modified files
-        if: steps.filter-go.outputs.any_modified == 'true'
+        if: steps.filter-cli.outputs.any_modified == 'true'
         run: |
           echo "Files that have changed or modified:"
-          echo "Filter-go: ${{ steps.filter-go.outputs.all_changed_and_modified_files }}"
+          echo "Filter-cli: ${{ steps.filter-cli.outputs.all_changed_and_modified_files }}"
   
 
   golang-lint:
