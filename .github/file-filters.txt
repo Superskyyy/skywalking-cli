@@ -17,5 +17,4 @@
 **/*.go
 go.mod
 .golangci.yml
-.github/*.yml
-.github/*.yaml
+.github/**/*
