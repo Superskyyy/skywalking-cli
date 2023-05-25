@@ -16,36 +16,105 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-name: Build
+name: CI
 
 on:
   pull_request:
   push:
     branches:
       - master
+  schedule:
+    - cron: "0 18 * * *" # TimeZone: UTC 0
+
+concurrency:
+  group: skywalking-cli-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build
+  check-license:
+    name: License header
+    if: (github.event_name == 'schedule' && github.repository == 'apache/skywalking-cli') || (github.event_name != 'schedule')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Check for go file changes
-        uses: getsentry/paths-filter@v2
-        id: changes
-        with:
-          token: ${{ github.token }}
-          filters: .github/file-filters.yml
+      - uses: actions/checkout@v3
 
+      - name: Check License Header
+        uses: apache/skywalking-eyes@5dfa68f93380a5e57259faaf95088b7f133b5778
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: "1.18"
+
+      - name: Check Dependencies License
+        run: make dependency-license
+
+
+  changes:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    timeout-minutes: 10
+    outputs:
+      cli: ${{ steps.filter-cli.outputs.any_modified }}
+    steps:
+      - uses: actions/checkout@v3 # required for push event
+        with:
+          fetch-depth: 0
+      - name: Check for CLI source changes (go + ci)
+        id: filter-cli
+        # The GHA version is pinned by infra
+        uses: tj-actions/changed-files@v35.9.2
+        with:
+          files_from_source_file: .github/file-filters.txt
+      - name: List all modified files
+        if: steps.filter-go.outputs.any_modified == 'true'
+        run: |
+          echo "Files that have changed or modified:"
+          echo "Filter-go: ${{ steps.filter-go.outputs.all_changed_and_modified_files }}"
+  
+
+  golang-lint:
+    name: Golang Lint
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: |
+      ( always() && ! cancelled() ) &&
+      ((github.event_name == 'schedule' && github.repository == 'apache/skywalking-cli') || needs.changes.outputs.cli == 'true')
+    steps:
+      - uses: actions/checkout@v3
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.18
+
+      - name: golangci-lint
+        if: steps.changes.outputs.src == 'true'
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: v1.50.0
+          args: --timeout 5m
+
+
+  build:
+    name: Build
+    needs: [changes]
+    runs-on: ubuntu-latest
+    if: |
+      ( always() && ! cancelled() ) &&
+      ((github.event_name == 'schedule' && github.repository == 'apache/skywalking-cli') || needs.changes.outputs.cli == 'true')
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
           go-version: 1.18
 
       - name: Check code generation
         run: make check-codegen
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: check-diff
@@ -56,3 +125,76 @@ jobs:
 
       - name: Build Docker images
         run: make docker
+
+
+  command-tests:
+    name: Command tests
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: |
+      ( always() && ! cancelled() ) &&
+      ((github.event_name == 'schedule' && github.repository == 'apache/skywalking-cli') || needs.changes.outputs.cli == 'true')
+    strategy:
+      matrix:
+        oap:
+          - 4874374ace223993124382257524538d5f515adc # v9.4.0
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.18
+
+      - name: Test commands
+        uses: apache/skywalking-infra-e2e@964ede199fe199e166920169dc5f8c9b214cfac5
+        env:
+          OAP_TAG: ${{ matrix.oap }}
+        with:
+          e2e-file: test/cases/basic/test.yaml
+
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: |
+      ( always() && ! cancelled() ) &&
+      ((github.event_name == 'schedule' && github.repository == 'apache/skywalking-cli') || needs.changes.outputs.cli == 'true')
+    steps:
+      - uses: actions/checkout@v3
+      - name: setup go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.18'
+
+      - name: run unit tests and report coverage
+        working-directory: ./
+        run: |
+          make coverage
+
+  required:
+    if: always()
+    name: Required
+    needs:
+      - check-license
+      - golang-lint
+      - build
+      - command-tests
+      - unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Merge Requirement
+        run: |
+          execute=${{ needs.changes.outputs.cli }}
+          checkLicense=${{ needs.check-license.result }}
+          [[ ${checkLicense} == 'success' ]] || exit -1;
+          golangLint=${{ needs.golang-lint.result }};
+          build=${{ needs.build.result }};
+          commandTests=${{ needs.command-tests.result }};
+          unitTests=${{ needs.unit-tests.result }};
+          [[ ${golangLint} == 'success' ]] || [[ ${execute} != 'true' && ${golangLint} == 'skipped' ]] || exit -2;
+          [[ ${build} == 'success' ]] || [[ ${execute} != 'true' && ${build} == 'skipped' ]] || exit -3;
+          [[ ${commandTests} == 'success' ]] || [[ ${execute} != 'true' && ${commandTests} == 'skipped' ]] || exit -4;
+          [[ ${unitTests} == 'success' ]] || [[ ${execute} != 'true' && ${unitTests} == 'skipped' ]] || exit -5;
+          exit 0;
