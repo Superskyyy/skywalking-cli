@@ -149,7 +149,7 @@ jobs:
           cache: false
 
       - name: Test commands
-        uses: superskyyy/skywalking-infra-e2e #apache/skywalking-infra-e2e@2b3aa53dbba73909730b211d5b8065abc74b56ad
+        uses: superskyyy/skywalking-infra-e2e@main #apache/skywalking-infra-e2e@2b3aa53dbba73909730b211d5b8065abc74b56ad
         env:
           OAP_TAG: ${{ matrix.oap }}
         with:
