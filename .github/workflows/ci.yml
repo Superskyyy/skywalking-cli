@@ -138,8 +138,7 @@ jobs:
     strategy:
       matrix:
         oap:
-          - 6fa89c79917cb10dbf48591c46abee3b513a2bab # old
-          - 4874374ace223993124382257524538d5f515adc # v9.4.0
+          - 6fa89c79917cb10dbf48591c46abee3b513a2bab # March 28th
     steps:
       - uses: actions/checkout@v3
       - name: Set up Go
@@ -149,7 +148,7 @@ jobs:
           cache: false
 
       - name: Test commands
-        uses: superskyyy/skywalking-infra-e2e@main #apache/skywalking-infra-e2e@2b3aa53dbba73909730b211d5b8065abc74b56ad
+        uses: apache/skywalking-infra-e2e@2b3aa53dbba73909730b211d5b8065abc74b56ad
         env:
           OAP_TAG: ${{ matrix.oap }}
         with:
